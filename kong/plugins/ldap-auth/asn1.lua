@@ -1,6 +1,5 @@
 local bin = require "bin"
 
-
 _M = {}
 
 BERCLASS = {
