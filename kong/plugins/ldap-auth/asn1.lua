@@ -1,17 +1,19 @@
-local bin = require "bin"
+local pack = require "pack"
+local bpack = string.pack
+local bunpack = string.unpack
+local math = math
+local bit = bit
 
-_M = {}
+local _M = {}
 
-BERCLASS = {
+_M.BERCLASS = {
   Universal = 0,
   Application = 64,
   ContextSpecific = 128,
   Private = 192
 }
 
---- The decoder class
---
-ASN1Decoder = {
+_M.ASN1Decoder = {
 
   new = function(self,o)
     o = o or {}
@@ -38,7 +40,7 @@ ASN1Decoder = {
 
     -- Boolean
     self.decoder["01"] = function( self, encStr, elen, pos )
-      local val = bin.unpack("H", encStr, pos)
+      local val = bunpack("H", encStr, pos)
       if val ~= "FF" then
         return pos, true
       else
@@ -53,7 +55,7 @@ ASN1Decoder = {
 
     -- Octet String
     self.decoder["04"] = function( self, encStr, elen, pos )
-      return bin.unpack("A" .. elen, encStr, pos)
+      return bunpack("A" .. elen, encStr, pos)
     end
 
     -- Null
@@ -112,13 +114,12 @@ ASN1Decoder = {
     local etype, elen
     local newpos = pos
 
-    newpos, etype = bin.unpack("H1", encStr, newpos)
+    newpos, etype = bunpack( encStr, "H1", newpos)
     newpos, elen = self.decodeLength(encStr, newpos)
 
     if self.decoder[etype] then
       return self.decoder[etype]( self, encStr, elen, newpos )
     else
-      stdnse.debug1("no decoder for etype: " .. etype)
       return newpos, nil
     end
   end,
@@ -133,14 +134,14 @@ ASN1Decoder = {
   -- @return The length of the following value.
   decodeLength = function(encStr, pos)
     local elen
-    pos, elen = bin.unpack('C', encStr, pos)
+    pos, elen = bunpack(encStr, 'b', pos)
     if (elen > 128) then
       elen = elen - 128
       local elenCalc = 0
       local elenNext
       for i = 1, elen do
         elenCalc = elenCalc * 256
-        pos, elenNext = bin.unpack("C", encStr, pos)
+        pos, elenNext = bunpack(encStr, 'b', pos)
         elenCalc = elenCalc + elenNext
       end
       elen = elenCalc
@@ -160,7 +161,7 @@ ASN1Decoder = {
     local seq = {}
     local sPos = 1
     local sStr
-    pos, sStr = bin.unpack("A" .. len, encStr, pos)
+    pos, sStr = bunpack("A" .. len, encStr, pos)
     while (sPos < len) do
       local newSeq
       sPos, newSeq = self:decode(sStr, sPos)
@@ -180,7 +181,7 @@ ASN1Decoder = {
     local n = 0
 
     repeat
-      pos, octet = bin.unpack("C", encStr, pos)
+      pos, octet = bunpack("C", encStr, pos)
       n = n * 128 + bit.band(0x7F, octet)
     until octet < 128
 
@@ -202,7 +203,7 @@ ASN1Decoder = {
     last = pos + len - 1
     if pos <= last then
       oid._snmp = '06'
-      pos, octet = bin.unpack("C", encStr, pos)
+      pos, octet = bunpack("C", encStr, pos)
       oid[2] = math.fmod(octet, 40)
       octet = octet - oid[2]
       oid[1] = octet/40
@@ -227,7 +228,7 @@ ASN1Decoder = {
   -- @return The decoded integer.
   decodeInt = function(encStr, len, pos)
     local hexStr
-    pos, hexStr = bin.unpack("H" .. len, encStr, pos)
+    pos, hexStr = bunpack("H" .. len, encStr, pos)
     local value = tonumber(hexStr, 16)
     if (value >= math.pow(256, len)/2) then
       value = value - math.pow(256, len)
@@ -237,9 +238,7 @@ ASN1Decoder = {
 
 }
 
---- The encoder class
---
-ASN1Encoder = {
+_M.ASN1Encoder = {
 
   new = function(self)
     local o = {}
@@ -257,7 +256,7 @@ ASN1Encoder = {
   encodeSeq = function(self, seqData)
     -- 0x30  = 00110000 =  00          1                   10000
     -- hex       binary    Universal   Constructed value   Data Type = SEQUENCE (16)
-    return bin.pack('HAA' , '30', self.encodeLength(#seqData), seqData)
+    return bpack('HAA' , '30', self.encodeLength(#seqData), seqData)
   end,
 
   ---
@@ -316,9 +315,9 @@ ASN1Encoder = {
     -- Boolean encoder
     self.encoder['boolean'] = function( self, val )
       if val then
-        return bin.pack('H','01 01 FF')
+        return bpack('H','01 01 FF')
       else
-        return bin.pack('H', '01 01 00')
+        return bpack('H', '01 01 00')
       end
     end
 
@@ -327,25 +326,26 @@ ASN1Encoder = {
       assert('table' == type(val), "val is not a table")
       assert(#val.type > 0, "Table is missing the type field")
       assert(val.value ~= nil, "Table is missing the value field")
-      return bin.pack("HAA", val.type, self.encodeLength(#val.value), val.value)
+      return bpack("HAA", val.type, self.encodeLength(#val.value), val.value)
     end
 
     -- Integer encoder
     self.encoder['number'] = function( self, val )
+      print("=====================",val)
       local ival = self.encodeInt(val)
       local len = self.encodeLength(#ival)
-      return bin.pack('HAA', '02', len, ival)
+      return bpack('HAA', '02', len, ival)
     end
 
     -- Octet String encoder
     self.encoder['string'] = function( self, val )
       local len = self.encodeLength(#val)
-      return bin.pack('HAA', '04', len, val)
+      return bpack('HAA', '04', len, val)
     end
 
     -- Null encoder
     self.encoder['nil'] = function( self, val )
-      return bin.pack('H', '05 00')
+      return bpack('H', '05 00')
     end
 
   end,
@@ -376,7 +376,8 @@ ASN1Encoder = {
       local valStr = ""
       while (val > 0) do
         lsb = math.fmod(val, 256)
-        valStr = valStr .. bin.pack("C", lsb)
+        print("==============", bpack('n', lsb))
+        valStr = valStr .. bpack('b', lsb)
         val = math.floor(val/256)
       end
       if lsb > 127 then -- two's complement collision
@@ -394,12 +395,12 @@ ASN1Encoder = {
       local valStr = ""
       while (tcval > 0) do
         lsb = math.fmod(tcval, 256)
-        valStr = valStr .. bin.pack("C", lsb)
+        valStr = valStr .. bpack("n", lsb)
         tcval = math.floor(tcval/256)
       end
       return string.reverse(valStr)
     else -- val == 0
-      return bin.pack("x")
+      return bpack("x")
     end
   end,
 
@@ -427,15 +428,8 @@ ASN1Encoder = {
 }
 
 
---- Converts a BER encoded type to a numeric value
---
--- This allows it to be used in the encoding function
---
--- @param class number - see <code>BERCLASS<code>
--- @param constructed boolean (true if constructed, false if primitive)
--- @param number numeric
--- @return number to be used with <code>encode</code>
-function BERtoInt(class, constructed, number)
+
+function _M.BERtoInt(class, constructed, number)
 
   local asn1_type = class + number
 
@@ -446,26 +440,19 @@ function BERtoInt(class, constructed, number)
   return asn1_type
 end
 
----
--- Converts an integer to a BER encoded type table
---
--- @param i number containing the value to decode
--- @return table with the following entries:
--- * <code>class</code>
--- * <code>constructed</code>
--- * <code>primitive</code>
--- * <code>number</code>
-function intToBER( i )
-  local ber = {}
 
-  if bit.band( i, BERCLASS.Application ) == BERCLASS.Application then
+function _M.intToBER(i)
+  local ber = {}
+  local inspect = require("inspect")
+  print(inspect(_M.BERCLASS),"====", i)
+  if bit.band( i, _M.BERCLASS.Application ) == _M.BERCLASS.Application then
     ber.class = BERCLASS.Application
-  elseif bit.band( i, BERCLASS.ContextSpecific ) == BERCLASS.ContextSpecific then
-    ber.class = BERCLASS.ContextSpecific
-  elseif bit.band( i, BERCLASS.Private ) == BERCLASS.Private then
-    ber.class = BERCLASS.Private
+  elseif bit.band( i, _M.BERCLASS.ContextSpecific ) == _M.BERCLASS.ContextSpecific then
+    ber.class = _M.BERCLASS.ContextSpecific
+  elseif bit.band( i, _M.BERCLASS.Private ) == _M.BERCLASS.Private then
+    ber.class = _M.BERCLASS.Private
   else
-    ber.class = BERCLASS.Universal
+    ber.class = _M.BERCLASS.Universal
   end
   if bit.band( i, 32 ) == 32 then
     ber.constructed = true
@@ -478,4 +465,4 @@ function intToBER( i )
 end
 
 
-return _ENV;
+return _M

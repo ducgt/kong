@@ -1,24 +1,24 @@
-local ldap = require "lua_ldap"
+local ldap = require "kong.plugins.ldap-auth.ldap"
+
 
 local _M = {}
 
 local function bind_authenticate(given_username, given_password, conf)
-  local binding, error = ldap.open_simple(
-    {
-      uri = conf.ldap_protocol.."://"..conf.ldap_host..":"..conf.ldap_port,
-      who = conf.attribute.."="..given_username..","..conf.base_dn,
-      password = given_password,
-      starttls = conf.start_tls,
-      cacertfile = conf.cacert_path,
-      cacertdir = conf.cacertdir_path,
-      certfile = conf.cert_path,
-      keyfile = conf.key_path
-    })
- 
-  if binding ~= nil then
-    return true;
+  local params = {
+    who = conf.attribute.."="..given_username..","..conf.base_dn,
+    password = given_password,
+  }
+  local ok, err
+
+  local sock = ngx.socket.tcp()
+
+  ok, err = sock:connect(conf.ldap_host, conf.ldap_port)
+  if not ok then
+    return false, err
   end
-  return false, error
+  
+  local binding, error = ldap.bindRequest(sock, params)
+  return binding, error
 end
 
 function _M.authenticate(given_username, given_password, conf)

@@ -33,8 +33,7 @@ dependencies = {
   "lua-llthreads2 ~> 0.1.3-1",
   "luacrypto >= 0.3.2-1",
   "luasyslog >= 1.0.0-2",
-  "lua_ldap >= 1.0.2-0",
-  "ber >= 0.3.1-1"
+  "lpack ~> 20070629-1"
 }
 build = {
   type = "builtin",
@@ -251,7 +250,9 @@ build = {
     ["kong.plugins.ldap-auth.handler"] = "kong/plugins/ldap-auth/handler.lua",
     ["kong.plugins.ldap-auth.access"] = "kong/plugins/ldap-auth/access.lua",
     ["kong.plugins.ldap-auth.schema"] = "kong/plugins/ldap-auth/schema.lua",
-    ["kong.plugins.ldap-auth.ldap_authentication"] = "kong/plugins/ldap-auth/ldap_authentication.lua"
+    ["kong.plugins.ldap-auth.ldap_authentication"] = "kong/plugins/ldap-auth/ldap_authentication.lua",
+    ["kong.plugins.ldap-auth.ldap"] = "kong/plugins/ldap-auth/ldap.lua",
+    ["kong.plugins.ldap-auth.asn1"] = "kong/plugins/ldap-auth/asn1.lua"
 
   },
   install = {
