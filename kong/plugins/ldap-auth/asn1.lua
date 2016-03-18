@@ -1,4 +1,4 @@
-local pack = require "pack"
+local pack = require "lua_pack"
 local bpack = string.pack
 local bunpack = string.unpack
 local math = math
@@ -13,6 +13,11 @@ _M.BERCLASS = {
   Private = 192
 }
 
+function _M.hex(s)
+ s=string.gsub(s,"(.)",function (x) return string.format("%02X",string.byte(x)) end)
+ return s
+end
+
 _M.ASN1Decoder = {
 
   new = function(self,o)
@@ -22,25 +27,16 @@ _M.ASN1Decoder = {
     return o
   end,
 
-  --- Tells the decoder to stop if it detects an error while decoding.
-  --
-  -- This should probably be the default, but some scripts depend on being
-  -- able to decode stuff while lacking proper ASN1 decoding functions.
-  -- @name ASN1Decoder.setStopOnError
-  -- @param val boolean, true if decoding should stop on error,
-  --        otherwise false (default)
   setStopOnError = function(self, val)
     self.stoponerror = val
   end,
 
-  --- Registers the base simple type decoders
-  -- @name ASN1Decoder.registerBaseDecoders
   registerBaseDecoders = function(self)
     self.decoder = {}
 
     -- Boolean
     self.decoder["01"] = function( self, encStr, elen, pos )
-      local val = bunpack("H", encStr, pos)
+      local val = bunpack(encStr, "X", pos)
       if val ~= "FF" then
         return pos, true
       else
@@ -55,7 +51,7 @@ _M.ASN1Decoder = {
 
     -- Octet String
     self.decoder["04"] = function( self, encStr, elen, pos )
-      return bunpack("A" .. elen, encStr, pos)
+      return bunpack(encStr, "A" .. elen, pos)
     end
 
     -- Null
@@ -75,27 +71,6 @@ _M.ASN1Decoder = {
     end
   end,
 
-  --- Table for registering additional tag decoders.
-  --
-  -- Each index is a tag number as a hex string. Values are ASN1 decoder
-  -- functions.
-  -- @name tagDecoders
-  -- @class table
-  -- @see asn1.decoder
-
-  --- Template for an ASN1 decoder function.
-  -- @name asn1.decoder
-  -- @param self The ASN1Decoder object
-  -- @param encStr Encoded string
-  -- @param elen Length of the object in bytes
-  -- @param pos Current position in the string
-  -- @return The position after decoding
-  -- @return The decoded object
-
-  --- Allows for registration of additional tag decoders
-  -- @name ASN1Decoder.registerTagDecoders
-  -- @param tagDecoders table containing decoding functions
-  -- @see tagDecoders
   registerTagDecoders = function(self, tagDecoders)
     self:registerBaseDecoders()
     for k, v in pairs(tagDecoders) do
@@ -103,18 +78,12 @@ _M.ASN1Decoder = {
     end
   end,
 
-  --- Decodes the ASN.1's built-in simple types
-  -- @name ASN1Decoder.decode
-  -- @param encStr Encoded string.
-  -- @param pos Current position in the string.
-  -- @return The position after decoding
-  -- @return The decoded value(s).
   decode = function(self, encStr, pos)
 
     local etype, elen
     local newpos = pos
 
-    newpos, etype = bunpack( encStr, "H1", newpos)
+    newpos, etype = bunpack(encStr, "X1", newpos)
     newpos, elen = self.decodeLength(encStr, newpos)
 
     if self.decoder[etype] then
@@ -124,24 +93,19 @@ _M.ASN1Decoder = {
     end
   end,
 
-  ---
-  -- Decodes length part of encoded value according to ASN.1 basic encoding
-  -- rules.
-  -- @name ASN1Decoder.decodeLength
-  -- @param encStr Encoded string.
-  -- @param pos Current position in the string.
-  -- @return The position after decoding.
-  -- @return The length of the following value.
   decodeLength = function(encStr, pos)
     local elen
-    pos, elen = bunpack(encStr, 'b', pos)
+    print("======hex========", _M.hex(encStr), "===",string.len(encStr), "====", pos)
+    pos, elen = bunpack(encStr, 'C', pos)
+    print("======hex========", elen,"===", "====", pos)
+    print(elen)
     if (elen > 128) then
       elen = elen - 128
       local elenCalc = 0
       local elenNext
       for i = 1, elen do
         elenCalc = elenCalc * 256
-        pos, elenNext = bunpack(encStr, 'b', pos)
+        pos, elenNext = bunpack(encStr, 'C', pos)
         elenCalc = elenCalc + elenNext
       end
       elen = elenCalc
@@ -149,19 +113,11 @@ _M.ASN1Decoder = {
     return pos, elen
   end,
 
-  ---
-  -- Decodes a sequence according to ASN.1 basic encoding rules.
-  -- @name ASN1Decoder.decodeSeq
-  -- @param encStr Encoded string.
-  -- @param len Length of sequence in bytes.
-  -- @param pos Current position in the string.
-  -- @return The position after decoding.
-  -- @return The decoded sequence as a table.
   decodeSeq = function(self, encStr, len, pos)
     local seq = {}
     local sPos = 1
     local sStr
-    pos, sStr = bunpack("A" .. len, encStr, pos)
+    pos, sStr = bunpack(encStr, "A" .. len, pos)
     while (sPos < len) do
       local newSeq
       sPos, newSeq = self:decode(sStr, sPos)
@@ -171,30 +127,18 @@ _M.ASN1Decoder = {
     return pos, seq
   end,
 
-  -- Decode one component of an OID from a byte string. 7 bits of the component
-  -- are stored in each octet, most significant first, with the eighth bit set in
-  -- all octets but the last. These encoding rules come from
-  -- http://luca.ntop.org/Teaching/Appunti/asn1.html, section 5.9 OBJECT
-  -- IDENTIFIER.
   decode_oid_component = function(encStr, pos)
     local octet
     local n = 0
 
     repeat
-      pos, octet = bunpack("C", encStr, pos)
+      pos, octet = bunpack(encStr, "b", pos)
       n = n * 128 + bit.band(0x7F, octet)
     until octet < 128
 
     return pos, n
   end,
 
-  --- Decodes an OID from a sequence of bytes.
-  -- @name ASN1Decoder.decodeOID
-  -- @param encStr Encoded string.
-  -- @param len Length of sequence in bytes.
-  -- @param pos Current position in the string.
-  -- @return The position after decoding.
-  -- @return The OID as an array.
   decodeOID = function(self, encStr, len, pos)
     local last
     local oid = {}
@@ -203,7 +147,7 @@ _M.ASN1Decoder = {
     last = pos + len - 1
     if pos <= last then
       oid._snmp = '06'
-      pos, octet = bunpack("C", encStr, pos)
+      pos, octet = bunpack(encStr, "C", pos)
       oid[2] = math.fmod(octet, 40)
       octet = octet - oid[2]
       oid[1] = octet/40
@@ -218,17 +162,9 @@ _M.ASN1Decoder = {
     return pos, oid
   end,
 
-  ---
-  -- Decodes an Integer according to ASN.1 basic encoding rules.
-  -- @name ASN1Decoder.decodeInt
-  -- @param encStr Encoded string.
-  -- @param len Length of integer in bytes.
-  -- @param pos Current position in the string.
-  -- @return The position after decoding.
-  -- @return The decoded integer.
   decodeInt = function(encStr, len, pos)
     local hexStr
-    pos, hexStr = bunpack("H" .. len, encStr, pos)
+    pos, hexStr = bunpack(encStr, "X" .. len, pos)
     local value = tonumber(hexStr, 16)
     if (value >= math.pow(256, len)/2) then
       value = value - math.pow(256, len)
@@ -248,23 +184,10 @@ _M.ASN1Encoder = {
     return o
   end,
 
-  ---
-  -- Encodes an ASN1 sequence
-  -- @name ASN1Encoder.encodeSeq
-  -- @param seqData A string of sequence data
-  -- @return ASN.1 BER-encoded sequence
   encodeSeq = function(self, seqData)
-    -- 0x30  = 00110000 =  00          1                   10000
-    -- hex       binary    Universal   Constructed value   Data Type = SEQUENCE (16)
-    return bpack('HAA' , '30', self.encodeLength(#seqData), seqData)
+    return bpack('XAA' , '30', self.encodeLength(#seqData), seqData)
   end,
 
-  ---
-  -- Encodes a given value according to ASN.1 basic encoding rules for SNMP
-  -- packet creation.
-  -- @name ASN1Encoder.encode
-  -- @param val Value to be encoded.
-  -- @return Encoded value.
   encode = function(self, val)
     local vtype = type(val)
 
@@ -277,24 +200,6 @@ _M.ASN1Encoder = {
     return ''
   end,
 
-  --- Table for registering additional tag encoders.
-  --
-  -- Each index is a lua type as a string. Values are ASN1 encoder
-  -- functions.
-  -- @name tagEncoders
-  -- @class table
-  -- @see asn1.encoder
-
-  --- Template for an ASN1 encoder function.
-  -- @name asn1.encoder
-  -- @param self The ASN1Encoder object
-  -- @param val The value to encode
-  -- @return The encoded object
-
-  --- Allows for registration of additional tag encoders
-  -- @name ASN1Decoder.registerTagEncoders
-  -- @param tagEncoders table containing encoding functions
-  -- @see tagEncoders
   registerTagEncoders = function(self, tagEncoders)
     self:registerBaseEncoders()
     for k, v in pairs(tagEncoders) do
@@ -302,22 +207,15 @@ _M.ASN1Encoder = {
     end
   end,
 
-  --- Registers the base ASN.1 Simple types encoders
-  --
-  -- * boolean
-  -- * integer (Lua number)
-  -- * string
-  -- * null (Lua nil)
-  -- @name ASN1Encoder.registerBaseEncoders
   registerBaseEncoders = function(self)
     self.encoder = {}
 
     -- Boolean encoder
     self.encoder['boolean'] = function( self, val )
       if val then
-        return bpack('H','01 01 FF')
+        return bpack('X','01 01 FF')
       else
-        return bpack('H', '01 01 00')
+        return bpack('X', '01 01 00')
       end
     end
 
@@ -326,35 +224,29 @@ _M.ASN1Encoder = {
       assert('table' == type(val), "val is not a table")
       assert(#val.type > 0, "Table is missing the type field")
       assert(val.value ~= nil, "Table is missing the value field")
-      return bpack("HAA", val.type, self.encodeLength(#val.value), val.value)
+      return bpack("XAA", val.type, self.encodeLength(#val.value), val.value)
     end
 
     -- Integer encoder
     self.encoder['number'] = function( self, val )
-      print("=====================",val)
       local ival = self.encodeInt(val)
       local len = self.encodeLength(#ival)
-      return bpack('HAA', '02', len, ival)
+      return bpack('XAA', '02', len, ival)
     end
 
     -- Octet String encoder
     self.encoder['string'] = function( self, val )
       local len = self.encodeLength(#val)
-      return bpack('HAA', '04', len, val)
+      return bpack('XAA', '04', len, val)
     end
 
     -- Null encoder
     self.encoder['nil'] = function( self, val )
-      return bpack('H', '05 00')
+      return bpack('X', '05 00')
     end
 
   end,
 
-  -- Encode one component of an OID as a byte string. 7 bits of the component are
-  -- stored in each octet, most significant first, with the eighth bit set in all
-  -- octets but the last. These encoding rules come from
-  -- http://luca.ntop.org/Teaching/Appunti/asn1.html, section 5.9 OBJECT
-  -- IDENTIFIER.
   encode_oid_component = function(n)
     local parts = {}
     parts[1] = string.char(bit.mod(n, 128))
@@ -365,19 +257,13 @@ _M.ASN1Encoder = {
     return string.reverse(table.concat(parts))
   end,
 
-  ---
-  -- Encodes an Integer according to ASN.1 basic encoding rules.
-  -- @name ASN1Encoder.encodeInt
-  -- @param val Value to be encoded.
-  -- @return Encoded integer.
   encodeInt = function(val)
     local lsb = 0
     if val > 0 then
       local valStr = ""
       while (val > 0) do
         lsb = math.fmod(val, 256)
-        print("==============", bpack('n', lsb))
-        valStr = valStr .. bpack('b', lsb)
+        valStr = valStr .. bpack('C', lsb)
         val = math.floor(val/256)
       end
       if lsb > 127 then -- two's complement collision
@@ -395,7 +281,7 @@ _M.ASN1Encoder = {
       local valStr = ""
       while (tcval > 0) do
         lsb = math.fmod(tcval, 256)
-        valStr = valStr .. bpack("n", lsb)
+        valStr = valStr .. bpack("C", lsb)
         tcval = math.floor(tcval/256)
       end
       return string.reverse(valStr)
@@ -404,12 +290,6 @@ _M.ASN1Encoder = {
     end
   end,
 
-  ---
-  -- Encodes the length part of a ASN.1 encoding triplet using the "primitive,
-  -- definite-length" method.
-  -- @name ASN1Encoder.encodeLength
-  -- @param len Length to be encoded.
-  -- @return Encoded length value.
   encodeLength = function(len)
     if len < 128 then
       return string.char(len)
@@ -425,6 +305,7 @@ _M.ASN1Encoder = {
       return string.char(#parts + 0x80) .. string.reverse(table.concat(parts))
     end
   end
+
 }
 
 
@@ -443,10 +324,9 @@ end
 
 function _M.intToBER(i)
   local ber = {}
-  local inspect = require("inspect")
-  print(inspect(_M.BERCLASS),"====", i)
+  print("========================", i)
   if bit.band( i, _M.BERCLASS.Application ) == _M.BERCLASS.Application then
-    ber.class = BERCLASS.Application
+    ber.class = _M.BERCLASS.Application
   elseif bit.band( i, _M.BERCLASS.ContextSpecific ) == _M.BERCLASS.ContextSpecific then
     ber.class = _M.BERCLASS.ContextSpecific
   elseif bit.band( i, _M.BERCLASS.Private ) == _M.BERCLASS.Private then

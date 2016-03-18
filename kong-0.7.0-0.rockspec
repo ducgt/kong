@@ -33,7 +33,7 @@ dependencies = {
   "lua-llthreads2 ~> 0.1.3-1",
   "luacrypto >= 0.3.2-1",
   "luasyslog >= 1.0.0-2",
-  "lpack ~> 20070629-1"
+  "lua_pack ~> 1.0.0-1"
 }
 build = {
   type = "builtin",

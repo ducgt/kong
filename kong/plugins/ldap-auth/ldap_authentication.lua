@@ -4,10 +4,7 @@ local ldap = require "kong.plugins.ldap-auth.ldap"
 local _M = {}
 
 local function bind_authenticate(given_username, given_password, conf)
-  local params = {
-    who = conf.attribute.."="..given_username..","..conf.base_dn,
-    password = given_password,
-  }
+  local who = conf.attribute.."="..given_username..","..conf.base_dn
   local ok, err
 
   local sock = ngx.socket.tcp()
@@ -17,7 +14,7 @@ local function bind_authenticate(given_username, given_password, conf)
     return false, err
   end
   
-  local binding, error = ldap.bindRequest(sock, params)
+  local binding, error = ldap.bindRequest(sock, who, given_password)
   return binding, error
 end
 
