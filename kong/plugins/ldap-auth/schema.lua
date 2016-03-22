@@ -30,14 +30,13 @@ end
 
 return {
 fields = {
-    ldap_protocol = {required = true, type = "string", enum = {"ldap", "ldaps"}},
     ldap_host = {required = true, type = "string"},
     ldap_port = {required = true, type = "number"},
     start_tls = {required = true, type = "boolean", default = false},
+    authenticate_server = {required = true, type = "boolean", default = false},
     cert = {required = false, type = "string", func = validate_cert},
     key = {required = false, type = "string", func = validate_key},
-    cacert = {required = false, type = "string", func = validate_cacert},
-    cacertdir_path = {required = false, type = "string"},
+    cert_chain = {required = false, type = "string", func = validate_cacert},
     base_dn = {required = true, type = "string"},
     attribute = {required = true, type = "string"},
     cache_ttl = {required = true, type = "number", default = 60},

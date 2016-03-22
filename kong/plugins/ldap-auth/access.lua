@@ -43,11 +43,11 @@ local function ldap_authenticate(given_username, given_password, conf)
     if not success then
       return false, error
     end
-    local _, error = sock:sslhandshake(true, conf.ldap_host, false)
+    local _, error = sock:sslhandshake(true, conf.ldap_host, conf.verify_ldap_host)
     if error ~= nil then
        return false, "failed to do SSL handshake with "..conf.ldap_host..":"..tostring(conf.ldap_port)..": ".. error
     end
-  end  
+  end
   
   local binding, error = ldap.bind_request(sock, who, given_password)
   
