@@ -5,16 +5,28 @@ local _M = {}
 
 local function bind_authenticate(given_username, given_password, conf)
   local who = conf.attribute.."="..given_username..","..conf.base_dn
-  local ok, err
-
+  
   local sock = ngx.socket.tcp()
-
-  ok, err = sock:connect(conf.ldap_host, conf.ldap_port)
+  sock:settimeout(conf.timeout)
+  local ok, error = sock:connect(conf.ldap_host, conf.ldap_port)
   if not ok then
-    return false, err
+    return false, error
   end
   
-  local binding, error = ldap.bindRequest(sock, who, given_password)
+  if conf.start_tls then
+    local success, error = ldap.start_tls(sock)
+    if not success then
+      return false, error
+    end
+    local _, error = sock:sslhandshake(true, conf.ldap_host, false)
+    if error ~= nil then
+       return false, "failed to do SSL handshake with "..conf.ldap_host..":"..tostring(conf.ldap_port)..": ".. error
+    end
+  end  
+  
+  local binding, error = ldap.bind_request(sock, who, given_password)
+  
+  sock:setkeepalive(conf.keepalive)
   return binding, error
 end
 

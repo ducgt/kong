@@ -18,6 +18,7 @@ local CACHE_KEYS = {
   TIMERS = "timers",
   ALL_APIS_BY_DIC = "ALL_APIS_BY_DIC",
   LDAP_CREDENTIAL = "ldap_credentials",
+  LDAP_SSL = "ldap_ssl"
 }
 
 local _M = {}
@@ -120,6 +121,10 @@ end
 
 function _M.ldap_credential_key(username)
   return CACHE_KEYS.LDAP_CREDENTIAL.."/"..username
+end
+
+function _M.ldap_ssl_data(api_id)
+  return CACHE_KEYS.LDAP_SSL..":"..api_id
 end
 
 function _M.get_or_set(key, cb, exptime)

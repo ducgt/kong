@@ -250,7 +250,6 @@ build = {
     ["kong.plugins.ldap-auth.handler"] = "kong/plugins/ldap-auth/handler.lua",
     ["kong.plugins.ldap-auth.access"] = "kong/plugins/ldap-auth/access.lua",
     ["kong.plugins.ldap-auth.schema"] = "kong/plugins/ldap-auth/schema.lua",
-    ["kong.plugins.ldap-auth.ldap_authentication"] = "kong/plugins/ldap-auth/ldap_authentication.lua",
     ["kong.plugins.ldap-auth.ldap"] = "kong/plugins/ldap-auth/ldap.lua",
     ["kong.plugins.ldap-auth.asn1"] = "kong/plugins/ldap-auth/asn1.lua"
 

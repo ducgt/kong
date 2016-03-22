@@ -2,7 +2,7 @@ local responses = require "kong.tools.responses"
 local constants = require "kong.constants"
 local cache = require "kong.tools.database_cache"
 local base64 = require "base64"
-local ldap_authentication = require "kong.plugins.ldap-auth.ldap_authentication"
+local ldap = require "kong.plugins.ldap-auth.ldap"
 
 local match = string.match
 local ngx_log = ngx.log
@@ -28,6 +28,36 @@ local function retrieve_credentials(authorization_header_value, conf)
   return username, password
 end
 
+local function ldap_authenticate(given_username, given_password, conf)
+  local who = conf.attribute.."="..given_username..","..conf.base_dn
+  
+  local sock = ngx.socket.tcp()
+  sock:settimeout(conf.timeout)
+  local ok, error = sock:connect(conf.ldap_host, conf.ldap_port)
+  if not ok then
+    return false, error
+  end
+  
+  if conf.start_tls then
+    local success, error = ldap.start_tls(sock)
+    if not success then
+      return false, error
+    end
+    local _, error = sock:sslhandshake(true, conf.ldap_host, false)
+    if error ~= nil then
+       return false, "failed to do SSL handshake with "..conf.ldap_host..":"..tostring(conf.ldap_port)..": ".. error
+    end
+  end  
+  
+  local binding, error = ldap.bind_request(sock, who, given_password)
+  
+  local ok, error = sock:setkeepalive(conf.keepalive)
+  if not ok then
+    ngx_log(ngx_ERR, "[ldap-auth] failed to keepalive to "..conf.ldap_host..":"..tostring(conf.ldap_port)..": ", error)
+  end
+  return binding, error
+end
+
 local function authenticate(conf, given_credentials)
   local given_username, given_password = retrieve_credentials(given_credentials)
   if given_username == nil then
@@ -35,11 +65,11 @@ local function authenticate(conf, given_credentials)
   end
 
   local credential = cache.get_or_set(cache.ldap_credential_key(given_username), function()
-    ngx_log(ngx_DEBUG, " authenticating user against LDAP server: "..conf.ldap_host..":"..conf.ldap_port)
+    ngx_log(ngx_DEBUG, "[ldap-auth] authenticating user against LDAP server: "..conf.ldap_host..":"..conf.ldap_port)
     
-    local ok, err = ldap_authentication.authenticate(given_username, given_password, conf)
+    local ok, err = ldap_authenticate(given_username, given_password, conf)
+    if err ~= nil then ngx_log(ngx_error, err) end
     if not ok then
-      ngx_log(ngx_error, err)
       return nil
     end
     return {username = given_username, password = given_password}

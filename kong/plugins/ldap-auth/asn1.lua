@@ -18,6 +18,11 @@ function _M.hex(s)
  return s
 end
 
+function _M.bytes(s)
+ s=string.gsub(s,"(.)",function (x) return string.byte(x).."." end)
+ return s
+end
+
 _M.ASN1Decoder = {
 
   new = function(self,o)
@@ -35,7 +40,7 @@ _M.ASN1Decoder = {
     self.decoder = {}
 
     -- Boolean
-    self.decoder["01"] = function( self, encStr, elen, pos )
+    self.decoder["01"] = function(self, encStr, elen, pos)
       local val = bunpack(encStr, "X", pos)
       if val ~= "FF" then
         return pos, true
@@ -45,28 +50,27 @@ _M.ASN1Decoder = {
     end
 
     -- Integer
-    self.decoder["02"] = function( self, encStr, elen, pos )
+    self.decoder["02"] = function(self, encStr, elen, pos)
       return self.decodeInt(encStr, elen, pos)
     end
 
     -- Octet String
-    self.decoder["04"] = function( self, encStr, elen, pos )
+    self.decoder["04"] = function(self, encStr, elen, pos)
       return bunpack(encStr, "A" .. elen, pos)
     end
 
     -- Null
-    self.decoder["05"] = function( self, encStr, elen, pos )
+    self.decoder["05"] = function(self, encStr, elen, pos)
       return pos, false
     end
 
     -- Object Identifier
-    self.decoder["06"] = function( self, encStr, elen, pos )
-      return self:decodeOID( encStr, elen, pos )
+    self.decoder["06"] = function(self, encStr, elen, pos)
+      return self:decodeOID(encStr, elen, pos)
     end
 
     -- Context specific tags
-    --
-    self.decoder["30"] = function( self, encStr, elen, pos )
+    self.decoder["30"] = function(self, encStr, elen, pos)
       return self:decodeSeq(encStr, elen, pos)
     end
   end,
@@ -79,15 +83,12 @@ _M.ASN1Decoder = {
   end,
 
   decode = function(self, encStr, pos)
-
     local etype, elen
     local newpos = pos
-
     newpos, etype = bunpack(encStr, "X1", newpos)
     newpos, elen = self.decodeLength(encStr, newpos)
-
     if self.decoder[etype] then
-      return self.decoder[etype]( self, encStr, elen, newpos )
+      return self.decoder[etype](self, encStr, elen, newpos)
     else
       return newpos, nil
     end
@@ -95,10 +96,7 @@ _M.ASN1Decoder = {
 
   decodeLength = function(encStr, pos)
     local elen
-    print("======hex========", _M.hex(encStr), "===",string.len(encStr), "====", pos)
     pos, elen = bunpack(encStr, 'C', pos)
-    print("======hex========", elen,"===", "====", pos)
-    print(elen)
     if (elen > 128) then
       elen = elen - 128
       local elenCalc = 0
@@ -121,7 +119,7 @@ _M.ASN1Decoder = {
     while (sPos < len) do
       local newSeq
       sPos, newSeq = self:decode(sStr, sPos)
-      if ( not(newSeq) and self.stoponerror ) then break end
+      if (not(newSeq) and self.stoponerror) then break end
       table.insert(seq, newSeq)
     end
     return pos, seq
@@ -211,7 +209,7 @@ _M.ASN1Encoder = {
     self.encoder = {}
 
     -- Boolean encoder
-    self.encoder['boolean'] = function( self, val )
+    self.encoder['boolean'] = function(self, val)
       if val then
         return bpack('X','01 01 FF')
       else
@@ -220,28 +218,25 @@ _M.ASN1Encoder = {
     end
 
     -- Table encoder
-    self.encoder['table'] = function( self, val )
-      assert('table' == type(val), "val is not a table")
-      assert(#val.type > 0, "Table is missing the type field")
-      assert(val.value ~= nil, "Table is missing the value field")
+    self.encoder['table'] = function(self, val)
       return bpack("XAA", val.type, self.encodeLength(#val.value), val.value)
     end
 
     -- Integer encoder
-    self.encoder['number'] = function( self, val )
+    self.encoder['number'] = function(self, val)
       local ival = self.encodeInt(val)
       local len = self.encodeLength(#ival)
       return bpack('XAA', '02', len, ival)
     end
 
     -- Octet String encoder
-    self.encoder['string'] = function( self, val )
+    self.encoder['string'] = function(self, val)
       local len = self.encodeLength(#val)
       return bpack('XAA', '04', len, val)
     end
 
     -- Null encoder
-    self.encoder['nil'] = function( self, val )
+    self.encoder['nil'] = function(self, val)
       return bpack('X', '05 00')
     end
 
@@ -301,14 +296,11 @@ _M.ASN1Encoder = {
         len = bit.rshift(len, 8)
       end
 
-      assert(#parts < 128)
       return string.char(#parts + 0x80) .. string.reverse(table.concat(parts))
     end
   end
 
 }
-
-
 
 function _M.BERtoInt(class, constructed, number)
 
@@ -321,20 +313,18 @@ function _M.BERtoInt(class, constructed, number)
   return asn1_type
 end
 
-
 function _M.intToBER(i)
   local ber = {}
-  print("========================", i)
-  if bit.band( i, _M.BERCLASS.Application ) == _M.BERCLASS.Application then
+  if bit.band(i, _M.BERCLASS.Application) == _M.BERCLASS.Application then
     ber.class = _M.BERCLASS.Application
-  elseif bit.band( i, _M.BERCLASS.ContextSpecific ) == _M.BERCLASS.ContextSpecific then
+  elseif bit.band(i, _M.BERCLASS.ContextSpecific) == _M.BERCLASS.ContextSpecific then
     ber.class = _M.BERCLASS.ContextSpecific
-  elseif bit.band( i, _M.BERCLASS.Private ) == _M.BERCLASS.Private then
+  elseif bit.band(i, _M.BERCLASS.Private) == _M.BERCLASS.Private then
     ber.class = _M.BERCLASS.Private
   else
     ber.class = _M.BERCLASS.Universal
   end
-  if bit.band( i, 32 ) == 32 then
+  if bit.band(i, 32) == 32 then
     ber.constructed = true
     ber.number = i - ber.class - 32
   else
@@ -343,6 +333,5 @@ function _M.intToBER(i)
   end
   return ber
 end
-
 
 return _M
